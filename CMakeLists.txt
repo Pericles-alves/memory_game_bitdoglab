@@ -6,8 +6,6 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Initialise pico_sdk from installed location
-# (note this can come from environment, CMake cache etc)
 
 # == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
 if(WIN32)
@@ -23,55 +21,70 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico_w CACHE STRING "Board type")
 
-# Set any variables required for importing libraries
-SET(FREERTOS_KERNEL_PATH ${CMAKE_CURRENT_SOURCE_DIR}/components/FreeRTOS-Kernel)
+# Initialise pico_sdk from installed location
+# (note this can come from environment, CMake cache etc)
 
+# == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
+if(WIN32)
+    set(USERHOME $ENV{USERPROFILE})
+else()
+    set(USERHOME $ENV{HOME})
+endif()
+set(sdkVersion 1.5.1)
+set(toolchainVersion 13_2_Rel1)
+set(picotoolVersion 2.0.0)
+set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
+if (EXISTS ${picoVscode})
+    include(${picoVscode})
+endif()
+# ====================================================================================
+set(PICO_BOARD pico CACHE STRING "Board type")
+
+# Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
-include(${FREERTOS_KERNEL_PATH}/portable/ThirdParty/GCC/RP2040/FreeRTOS_Kernel_import.cmake)
 
-project(memory_game C CXX ASM)
+project(neopixel_pio C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
-add_executable(memory_game
-        #test2.c
-        #components/joystick/joystick_timer_freertos.c
-        #components/led_matrix/test_component.c
-        #components/led_matrix/neopixel_pio.c
-        #components/FreeRTOS/semaforo.c
-        components/joystick/joystick_timer.c
-        #components/joystick/joystick.c
-        #components/joystick/joystick_led.c
-        #components/oled_ssd1306/test_ssd1306_module.c
-        #components/oled_ssd1306/ssd1306_i2c.c
-        )
 
-        # Generate PIO header
-pico_generate_pio_header(memory_game ${CMAKE_CURRENT_LIST_DIR}/components/led_matrix/ws2818b.pio)
+add_executable(neopixel_pio 
+            neopixel_pio.c 
+            
+            )
+
+
+# Generate PIO header
+pico_generate_pio_header(neopixel_pio ${CMAKE_CURRENT_LIST_DIR}/ws2818b.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(memory_game 0)
-pico_enable_stdio_usb(memory_game 1)
+pico_enable_stdio_uart(neopixel_pio 0)
+pico_enable_stdio_usb(neopixel_pio 1)
+
+# Add the standard library to the build
+target_link_libraries(neopixel_pio
+        pico_stdlib)
 
 # Add the standard include files to the build
-target_include_directories(memory_game PRIVATE
+target_include_directories(neopixel_pio PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}
 )
 
-# pull in common dependencies and additional i2c hardware support
-target_link_libraries(memory_game 
-                    pico_stdlib 
-                    hardware_i2c 
-                    hardware_adc 
-                    hardware_pwm 
-                    hardware_timer 
-                    FreeRTOS-Kernel-Heap4
-                    hardware_pio
-                    hardware_clocks)
+# Add any user requested libraries
+target_link_libraries(neopixel_pio 
+        hardware_pio
+        hardware_clocks
+        pico_stdlib 
+        hardware_i2c 
+        hardware_adc 
+        hardware_pwm 
+        hardware_timer 
+        hardware_pio
+        hardware_clocks
+        )
 
-# create map/bin/hex file etc.
-pico_add_extra_outputs(memory_game)
+pico_add_extra_outputs(neopixel_pio)
+
