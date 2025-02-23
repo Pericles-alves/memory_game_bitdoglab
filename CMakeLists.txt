@@ -38,9 +38,12 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 add_executable(memory_game
-        components/led_matrix/neopixel_pio.c
+        #test2.c
+        #components/joystick/joystick_timer_freertos.c
+        #components/led_matrix/test_component.c
+        #components/led_matrix/neopixel_pio.c
         #components/FreeRTOS/semaforo.c
-        #components/joystick/joystick_timer.c
+        components/joystick/joystick_timer.c
         #components/joystick/joystick.c
         #components/joystick/joystick_led.c
         #components/oled_ssd1306/test_ssd1306_module.c
@@ -48,7 +51,7 @@ add_executable(memory_game
         )
 
         # Generate PIO header
-pico_generate_pio_header(neopixel_pio ${CMAKE_CURRENT_LIST_DIR}/components/led_matrix/ws2818b.pio)
+pico_generate_pio_header(memory_game ${CMAKE_CURRENT_LIST_DIR}/components/led_matrix/ws2818b.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(memory_game 0)
@@ -61,7 +64,8 @@ target_include_directories(memory_game PRIVATE
 
 # pull in common dependencies and additional i2c hardware support
 target_link_libraries(memory_game 
-                    pico_stdlib hardware_i2c 
+                    pico_stdlib 
+                    hardware_i2c 
                     hardware_adc 
                     hardware_pwm 
                     hardware_timer 

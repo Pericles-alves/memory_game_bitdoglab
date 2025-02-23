@@ -133,6 +133,11 @@ void npSetLEDs(uint led_ids[], uint size_of_led_ids, uint8_t leds_rgb_color[]){
   npWrite();
 }
 
+void displayArrowIndex(uint i){
+  npSetLEDs(arrow_positions[i], arrow_size, arrow_colors[i]);
+}
+
+
 
 int main() {
 
@@ -143,9 +148,9 @@ int main() {
   npInit(LED_PIN);
   npClear();
 
-  for (size_t i = 0; i < num_of_arrows; i++)
+  for (uint i = 0; i < num_of_arrows; i++)
   {
-    npSetLEDs(arrow_positions[i], arrow_size, arrow_colors[i]);
+    displayArrowIndex(i);
     sleep_ms(1000);
   }
 
