@@ -8,9 +8,17 @@
 #include <time.h>
 #include "hardware/adc.h"
 #include "hardware/timer.h"
+#include "oled_ssd1306/ssd1306_i2c.h"
+#include "hardware/pwm.h"
 
 // Biblioteca gerada pelo arquivo .pio durante compilação.
 #include "ws2818b.pio.h"
+
+#define JOYSTICK_BTN 22
+#define BUZZER_PIN 21
+#define BUZZER_FREQUENCY 100
+
+volatile bool btn_pressed = false;
 
 #define NUM_BUTTONS 9
 #define SEQUENCE_LENGTH 10
@@ -30,6 +38,7 @@ const uint button_pins[NUM_BUTTONS] = {2, 3, 4, 5, 6, 7, 8, 9};
 
 #define LED_COUNT 25
 #define LED_PIN 7
+#define DIM_FACTOR 0.5  // Dimming factor (range 0 to 1)
 
 uint8_t arrow_colors[8][3] = {
   {0x08, 0x00, 0x00}, // Color 1
@@ -42,10 +51,31 @@ uint8_t arrow_colors[8][3] = {
   {0x00, 0x06, 0x08}  // Color 8
 };
 
-uint8_t red_color[3] = {0x10,0x00,0x00};
-uint8_t green_color[3] = {0x00,0x10,0x00};
-uint8_t blue_color[3] = {0x00,0x00,0x10};
+/*
+matrix:
+uint8_t arrow_colors[8][3] = {
+  {0x08, 0x00, 0x00}, // Color 1
+  {0x09, 0x08, 0x12}, // Color 2
+  {0x08, 0x12, 0x06}, // Color 3
+  {0x06, 0x11, 0x00}, // Color 4
+  {0x08, 0x00, 0x06}, // Color 5
+  {0x06, 0x10, 0x08}, // Color 6
+  {0x12, 0x06, 0x08}, // Color 7
+  {0x00, 0x06, 0x08}  // Color 8
+};
 
+uint8_t arrow_colors[8][3] = {
+  {255 - 0x08, 255 - 0x00, 255 - 0x00}, // Color 1
+  {255 - 0x09, 255 - 0x08, 255 - 0x12}, // Color 2
+  {255 - 0x08, 255 - 0x12, 255 - 0x06}, // Color 3
+  {255 - 0x06, 255 - 0x11, 255 - 0x00}, // Color 4
+  {255 - 0x08, 255 - 0x00, 255 - 0x06}, // Color 5
+  {255 - 0x06, 255 - 0x10, 255 - 0x08}, // Color 6
+  {255 - 0x12, 255 - 0x06, 255 - 0x08}, // Color 7
+  {255 - 0x00, 255 - 0x06, 255 - 0x08}  // Color 8
+};
+
+*/
 
 uint arrow_positions[8][9] = {
   {14,13,12,11,10,8,2,18,22}, // right
@@ -82,6 +112,34 @@ npLED_t leds[LED_COUNT];
 // Variáveis para uso da máquina PIO.
 PIO np_pio;
 uint sm;
+
+
+uint notes_buzzer[8]= {261, 293, 329, 349, 392, 440, 493, 523};
+
+// Inicializa o PWM no pino do buzzer
+void pwm_init_buzzer(uint pin) {
+  gpio_set_function(pin, GPIO_FUNC_PWM);
+  uint slice_num = pwm_gpio_to_slice_num(pin);
+  pwm_config config = pwm_get_default_config();
+  pwm_config_set_clkdiv(&config, 4.0f); // Ajusta divisor de clock
+  pwm_init(slice_num, &config, true);
+  pwm_set_gpio_level(pin, 0); // Desliga o PWM inicialmente
+}
+
+// Toca uma nota com a frequência e duração especificadas
+void play_tone(uint pin, uint frequency, uint duration_ms) {
+  uint slice_num = pwm_gpio_to_slice_num(pin);
+  uint32_t clock_freq = clock_get_hz(clk_sys);
+  uint32_t top = clock_freq / frequency - 1;
+
+  pwm_set_wrap(slice_num, top);
+  pwm_set_gpio_level(pin, top / 2); // 50% de duty cycle
+
+  sleep_ms(duration_ms);
+
+  pwm_set_gpio_level(pin, 0); // Desliga o som após a duração
+  sleep_ms(50); // Pausa entre notas
+}
 
 // Function to read joystick ADC values
 JoystickDirection read_joystick() {
@@ -235,7 +293,8 @@ void play_sequence(int sequence[], int length) {
   for (uint i = 0; i < length; i++) {
       printf("Button %d\n", sequence[i]);  // Simulate LED indicator or serial print
       displayArrowIndex(sequence[i]-1);
-      sleep_ms(500);
+      play_tone(BUZZER_PIN, notes_buzzer[sequence[i]-1], 150);
+      sleep_ms(350);
       npClear();
       npWrite();
       sleep_ms(500);
@@ -257,7 +316,8 @@ bool check_player_input(int sequence[], int length) {
       int index = joystick_input - 1;
 
       displayArrowIndex(index);
-      sleep_ms(150);
+      play_tone(BUZZER_PIN, notes_buzzer[index], 150);
+      //sleep_ms(150);
       npClear();
       npWrite();
 
@@ -272,9 +332,66 @@ bool check_player_input(int sequence[], int length) {
   return true;
 }
 
+void btn_pressed_callback(uint gpio, uint32_t events){
+  btn_pressed = true;
+  gpio_set_irq_enabled(JOYSTICK_BTN, GPIO_IRQ_EDGE_FALL, true);
+}
+
 int main() {
 
   stdio_init_all();
+  
+  SSD1306_init();
+  pwm_init_buzzer(BUZZER_PIN);
+  gpio_init(JOYSTICK_BTN);
+  gpio_set_dir(JOYSTICK_BTN, GPIO_IN);
+  gpio_pull_up(JOYSTICK_BTN);
+  gpio_set_irq_enabled_with_callback(JOYSTICK_BTN, GPIO_IRQ_EDGE_FALL, true, &btn_pressed_callback);
+
+  // Initialize render area for entire frame (SSD1306_WIDTH pixels by SSD1306_NUM_PAGES pages)
+  struct render_area frame_area = {
+      start_col: 0,
+      end_col : SSD1306_WIDTH - 1,
+      start_page : 0,
+      end_page : SSD1306_NUM_PAGES - 1
+      };
+
+  calc_render_area_buflen(&frame_area);
+
+  // zero the entire display
+  uint8_t buf[SSD1306_BUF_LEN];
+  memset(buf, 0, SSD1306_BUF_LEN);
+  render(buf, &frame_area);
+  
+  char *text[] = {
+      "             ",
+      " Memory Game ",
+      "             ",
+      "Press and hold",
+      " Joystick to ",
+      "    START    ",
+      "             ",
+  };
+
+  int y = 0;
+  for (uint i = 0 ;i < count_of(text); i++) {
+      WriteString(buf, 5, y, text[i]);
+      y+=8;
+  }
+  render(buf, &frame_area);
+
+
+  while(btn_pressed == false){
+      sleep_ms(500);
+      SSD1306_send_cmd(SSD1306_SET_INV_DISP);
+      sleep_ms(500);
+      SSD1306_send_cmd(SSD1306_SET_NORM_DISP);
+  }
+  memset(buf, 0, SSD1306_BUF_LEN);
+  render(buf, &frame_area);
+  SSD1306_send_cmd(SSD1306_SET_INV_DISP);
+
+
   srand(time(NULL));  // Initialize random seed
   // Initialize ADC
   adc_init();
