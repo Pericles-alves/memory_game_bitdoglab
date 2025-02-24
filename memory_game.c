@@ -133,7 +133,7 @@ void play_tone(uint pin, uint frequency, uint duration_ms) {
   uint32_t top = clock_freq / frequency - 1;
 
   pwm_set_wrap(slice_num, top);
-  pwm_set_gpio_level(pin, top / 2); // 50% de duty cycle
+  pwm_set_gpio_level(pin, top / 2.5); // 50% de duty cycle
 
   sleep_ms(duration_ms);
 
